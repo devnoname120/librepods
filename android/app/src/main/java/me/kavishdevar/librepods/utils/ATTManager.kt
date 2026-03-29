@@ -24,6 +24,7 @@
 package me.kavishdevar.librepods.utils
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.os.ParcelUuid
@@ -49,7 +50,7 @@ enum class ATTCCCDHandles(val value: Int) {
     HEARING_AID(ATTHandles.HEARING_AID.value + 1),
 }
 
-class ATTManager(private val device: BluetoothDevice) {
+class ATTManager(private val adapter: BluetoothAdapter, private val device: BluetoothDevice) {
     companion object {
         private const val TAG = "ATTManager"
 
@@ -72,7 +73,7 @@ class ATTManager(private val device: BluetoothDevice) {
         HiddenApiBypass.addHiddenApiExemptions("Landroid/bluetooth/BluetoothSocket;")
         val uuid = ParcelUuid.fromString("00000000-0000-0000-0000-000000000000")
 
-        socket = createBluetoothSocket(device, uuid)
+        socket = createBluetoothSocket(adapter, device, uuid)
         socket!!.connect()
         input = socket!!.inputStream
         output = socket!!.outputStream
@@ -195,9 +196,10 @@ class ATTManager(private val device: BluetoothDevice) {
         }
     }
 
-    private fun createBluetoothSocket(device: BluetoothDevice, uuid: ParcelUuid): BluetoothSocket {
+    private fun createBluetoothSocket(adapter: BluetoothAdapter, device: BluetoothDevice, uuid: ParcelUuid): BluetoothSocket {
         val type = 3 // L2CAP
         val constructorSpecs = listOf(
+            arrayOf(adapter, device, type, true, 31, uuid),
             arrayOf(device, type, true, true, 31, uuid),
             arrayOf(device, type, 1, true, true, 31, uuid),
             arrayOf(type, 1, true, true, device, 31, uuid),

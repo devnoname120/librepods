@@ -2419,7 +2419,7 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
 
                             BluetoothConnectionManager.setCurrentConnection(socket, device)
 
-                            attManager = ATTManager(device)
+                            attManager = ATTManager(adapter, device)
                             attManager!!.connect()
 
                             // Create AirPodsInstance from stored config if available
