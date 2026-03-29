@@ -267,10 +267,10 @@ fun AirPodsSettingsScreen(dev: BluetoothDevice?, service: AirPodsService,
                 }
 //                 val actAsAppleDeviceHookEnabled = RadareOffsetFinder.isSdpOffsetAvailable()
 //                 if (actAsAppleDeviceHookEnabled) {
-                    item(key = "spacer_hearing_health") { Spacer(modifier = Modifier.height(32.dp)) }
-                    item(key = "hearing_health") {
-                        HearingHealthSettings(navController = navController)
-                    }
+//                    item(key = "spacer_hearing_health") { Spacer(modifier = Modifier.height(32.dp)) }
+//                    item(key = "hearing_health") {
+//                        HearingHealthSettings(navController = navController)
+//                    }
 //                 }
 
                 if (capabilities.contains(Capability.LISTENING_MODE)) {

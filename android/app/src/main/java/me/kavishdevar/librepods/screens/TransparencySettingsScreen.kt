@@ -90,7 +90,7 @@ fun TransparencySettingsScreen(navController: NavController) {
     val verticalScrollState = rememberScrollState()
     val attManager = ServiceManager.getService()?.attManager ?: return
     val aacpManager = remember { ServiceManager.getService()?.aacpManager }
-    val isSdpOffsetAvailable = remember { mutableStateOf(true) } // always available rn, for testing without radare
+    val isSdpOffsetAvailable = remember { mutableStateOf(false) } // always available rn, for testing without radare
 //         remember { mutableStateOf(RadareOffsetFinder.isSdpOffsetAvailable()) }
 
     val trackColor = if (isDarkTheme) Color(0xFFB3B3B3) else Color(0xFF929491)

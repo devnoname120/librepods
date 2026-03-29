@@ -99,7 +99,7 @@ fun AccessibilitySettingsScreen(navController: NavController) {
     val isDarkTheme = isSystemInDarkTheme()
     val textColor = if (isDarkTheme) Color.White else Color.Black
     val aacpManager = remember { ServiceManager.getService()?.aacpManager }
-    val isSdpOffsetAvailable = remember { mutableStateOf(true) } // always available rn, for testing without radare
+    val isSdpOffsetAvailable = remember { mutableStateOf(false) } // always available rn, for testing without radare
 //         remember { mutableStateOf(RadareOffsetFinder.isSdpOffsetAvailable()) }
 
     val trackColor = if (isDarkTheme) Color(0xFFB3B3B3) else Color(0xFF929491)
