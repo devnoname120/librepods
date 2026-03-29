@@ -29,6 +29,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.appwidget.AppWidgetManager
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothManager
@@ -252,9 +253,10 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
             if (device.connectionState == "Disconnected" && !config.bleOnlyMode) {
                 Log.d(TAG, "Seems no device has taken over, we will.")
                 val bluetoothManager = getSystemService(BluetoothManager::class.java)
-                val bluetoothDevice = bluetoothManager.adapter.getRemoteDevice(sharedPreferences.getString(
+                val bluetoothAdapter = bluetoothManager.adapter
+                val bluetoothDevice = bluetoothAdapter.getRemoteDevice(sharedPreferences.getString(
                     "mac_address", "") ?: "")
-                connectToSocket(bluetoothDevice)
+                connectToSocket(bluetoothAdapter, bluetoothDevice)
             }
             Log.d(TAG, "Device status changed")
             if (isConnectedLocally) return
@@ -607,7 +609,7 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
 //                        if ((CrossDevice.isAvailable && !isConnectedLocally && earDetectionNotification.status.contains(0x00)) || leAvailableForAudio) CoroutineScope(
                         if (leAvailableForAudio) CoroutineScope(
                             Dispatchers.IO).launch {
-                                takeOver("call")
+                            takeOver("call")
                         }
                         isInCall = true
                     }
@@ -665,17 +667,18 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
 
 //                    Log.d("AirPodsCrossDevice", CrossDevice.isAvailable.toString())
 //                    if (!CrossDevice.isAvailable) {
-                        Log.d(TAG, "${config.deviceName} connected")
-                        CoroutineScope(Dispatchers.IO).launch {
-                            connectToSocket(device!!)
-                        }
-                        Log.d(TAG, "Setting metadata")
-                        setMetadatas(device!!)
-                        isConnectedLocally = true
-                        macAddress = device!!.address
-                        sharedPreferences.edit {
-                            putString("mac_address", macAddress)
-                        }
+                    Log.d(TAG, "${config.deviceName} connected")
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val bluetoothManager = getSystemService(BluetoothManager::class.java)
+                        connectToSocket(bluetoothManager.adapter, device!!)
+                    }
+                    Log.d(TAG, "Setting metadata")
+                    setMetadatas(device!!)
+                    isConnectedLocally = true
+                    macAddress = device!!.address
+                    sharedPreferences.edit {
+                        putString("mac_address", macAddress)
+                    }
 //                    }
 
                 } else if (intent?.action == AirPodsNotifications.AIRPODS_DISCONNECTED) {
@@ -688,7 +691,7 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                 }
             }
         }
-         val showIslandReceiver = object: BroadcastReceiver() {
+        val showIslandReceiver = object: BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == "me.kavishdevar.librepods.cross_device_island") {
                     showIsland(this@AirPodsService, batteryNotification.getBattery().find { it.component == BatteryComponent.LEFT}?.level!!.coerceAtMost(batteryNotification.getBattery().find { it.component == BatteryComponent.RIGHT}?.level!!))
@@ -743,14 +746,14 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                                     val connectedDevices = proxy.connectedDevices
                                     if (connectedDevices.isNotEmpty()) {
 //                                        if (!CrossDevice.isAvailable) {
-                                            CoroutineScope(Dispatchers.IO).launch {
-                                                connectToSocket(device)
-                                            }
-                                            setMetadatas(device)
-                                            macAddress = device.address
-                                            sharedPreferences.edit {
-                                                putString("mac_address", macAddress)
-                                            }
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            connectToSocket(bluetoothAdapter, device)
+                                        }
+                                        setMetadatas(device)
+                                        macAddress = device.address
+                                        sharedPreferences.edit {
+                                            putString("mac_address", macAddress)
+                                        }
 //                                        }
                                         this@AirPodsService.sendBroadcast(
                                             Intent(AirPodsNotifications.AIRPODS_CONNECTED)
@@ -1555,7 +1558,7 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
             .setContentText("Unable to connect to AirPods over L2CAP")
             .setStyle(NotificationCompat.BigTextStyle()
                 .bigText("Your AirPods are connected via Bluetooth, but LibrePods couldn't connect to AirPods using L2CAP. " +
-                         "Error: $errorMessage"))
+                    "Error: $errorMessage"))
             .setContentIntent(pendingIntent)
             .setCategory(Notification.CATEGORY_ERROR)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -2085,56 +2088,56 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                     device.METADATA_MAIN_ICON,
                     resToUri(instance.model.budCaseRes).toString().toByteArray()
                 ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_MODEL_NAME,
-                    instance.model.name.toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_DEVICE_TYPE,
-                    device.DEVICE_TYPE_UNTETHERED_HEADSET.toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_UNTETHERED_CASE_ICON,
-                    resToUri(instance.model.caseRes).toString().toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_UNTETHERED_RIGHT_ICON,
-                    resToUri(instance.model.rightBudsRes).toString().toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_UNTETHERED_LEFT_ICON,
-                    resToUri(instance.model.leftBudsRes).toString().toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_MANUFACTURER_NAME,
-                    instance.model.manufacturer.toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_COMPANION_APP,
-                    "me.kavishdevar.librepods".toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_UNTETHERED_CASE_LOW_BATTERY_THRESHOLD,
-                    "20".toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_UNTETHERED_LEFT_LOW_BATTERY_THRESHOLD,
-                    "20".toByteArray()
-                ) &&
-                SystemApisUtils.setMetadata(
-                    device,
-                    device.METADATA_UNTETHERED_RIGHT_LOW_BATTERY_THRESHOLD,
-                    "20".toByteArray()
-                )
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_MODEL_NAME,
+                        instance.model.name.toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_DEVICE_TYPE,
+                        device.DEVICE_TYPE_UNTETHERED_HEADSET.toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_UNTETHERED_CASE_ICON,
+                        resToUri(instance.model.caseRes).toString().toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_UNTETHERED_RIGHT_ICON,
+                        resToUri(instance.model.rightBudsRes).toString().toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_UNTETHERED_LEFT_ICON,
+                        resToUri(instance.model.leftBudsRes).toString().toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_MANUFACTURER_NAME,
+                        instance.model.manufacturer.toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_COMPANION_APP,
+                        "me.kavishdevar.librepods".toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_UNTETHERED_CASE_LOW_BATTERY_THRESHOLD,
+                        "20".toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_UNTETHERED_LEFT_LOW_BATTERY_THRESHOLD,
+                        "20".toByteArray()
+                    ) &&
+                    SystemApisUtils.setMetadata(
+                        device,
+                        device.METADATA_UNTETHERED_RIGHT_LOW_BATTERY_THRESHOLD,
+                        "20".toByteArray()
+                    )
                 Log.d(TAG, "Metadata set: $metadataSet")
             } else {
                 Log.w(TAG, "AirPods instance is not of type AirPodsInstance, skipping metadata setting")
@@ -2325,7 +2328,9 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
         Log.d(TAG, macAddress)
 
 //        sharedPreferences.edit { putBoolean("CrossDeviceIsAvailable", false) }
-        device = getSystemService(BluetoothManager::class.java).adapter.bondedDevices.find {
+        val bluetoothManager = getSystemService(BluetoothManager::class.java)
+        val bluetoothAdapter = bluetoothManager.adapter
+        device = bluetoothAdapter.bondedDevices.find {
             it.address == macAddress
         }
 
@@ -2341,7 +2346,7 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                 // Set a temporary connecting state
                 isConnectedLocally = false // Keep as false since we're not actually connecting to L2CAP
             } else {
-                connectToSocket(device!!)
+                connectToSocket(bluetoothAdapter, device!!)
                 connectAudio(this, device)
                 isConnectedLocally = true
             }
@@ -2352,9 +2357,10 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
 //        CrossDevice.isAvailable = false
     }
 
-    private fun createBluetoothSocket(device: BluetoothDevice, uuid: ParcelUuid): BluetoothSocket {
+    private fun createBluetoothSocket(adapter: BluetoothAdapter, device: BluetoothDevice, uuid: ParcelUuid): BluetoothSocket {
         val type = 3 // L2CAP
         val constructorSpecs = listOf(
+            arrayOf(adapter, device, type, true, true, 0x1001, uuid), // A16QPR3
             arrayOf(device, type, true, true, 0x1001, uuid),
             arrayOf(device, type, 1, true, true, 0x1001, uuid),
             arrayOf(type, 1, true, true, device, 0x1001, uuid),
@@ -2390,13 +2396,13 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
     }
 
     @SuppressLint("MissingPermission", "UnspecifiedRegisterReceiverFlag")
-    fun connectToSocket(device: BluetoothDevice, manual: Boolean = false) {
+    fun connectToSocket(adapter: BluetoothAdapter, device: BluetoothDevice, manual: Boolean = false) {
         Log.d(TAG, "<LogCollector:Start> Connecting to socket")
         HiddenApiBypass.addHiddenApiExemptions("Landroid/bluetooth/BluetoothSocket;")
         val uuid: ParcelUuid = ParcelUuid.fromString("74ec2172-0bad-4d01-8f77-997b2be0722a")
         if (!isConnectedLocally) {
             socket = try {
-                createBluetoothSocket(device, uuid)
+                createBluetoothSocket(adapter, device, uuid)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create BluetoothSocket: ${e.message}")
                 showSocketConnectionFailureNotification("Failed to create Bluetooth socket: ${e.localizedMessage}")
@@ -2812,7 +2818,7 @@ class AirPodsService : Service(), SharedPreferences.OnSharedPreferenceChangeList
         }
         if (device != null) {
             CoroutineScope(Dispatchers.IO).launch {
-                connectToSocket(device!!, manual = true)
+                connectToSocket(bluetoothAdapter, device!!, manual = true)
             }
         }
     }
