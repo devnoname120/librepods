@@ -265,9 +265,9 @@ static bool hookLibrary(const char* libname) {
                     findSymbolOffset(decompressed,
                                      "l2c_fcr_chk_chan_modes");
 
-            /* uint64_t sdp_offset =
+            uint64_t sdp_offset =
                     findSymbolOffset(decompressed,
-                                     "BTA_DmSetLocalDiRecord"); */
+                                     "BTA_DmSetLocalDiRecord");
 
             if (chk_offset) {
                 void* target =
