@@ -280,7 +280,7 @@ static bool hookLibrary(const char* libname) {
                 LOGI("Hooked l2c_fcr_chk_chan_modes");
             }
 
-            /*if (sdp_offset) {
+            if (sdp_offset) {
                 void* target =
                         reinterpret_cast<void*>(base + sdp_offset);
 
@@ -289,7 +289,7 @@ static bool hookLibrary(const char* libname) {
                           (void**)&original_BTA_DmSetLocalDiRecord);
 
                 LOGI("Hooked BTA_DmSetLocalDiRecord");
-            }*/
+            }
 
             return true;
         }
