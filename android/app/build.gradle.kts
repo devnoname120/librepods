@@ -78,7 +78,7 @@ dependencies {
     implementation(libs.aboutlibraries.compose.m3)
     // compileOnly(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
     // implementation(fileTree(mapOf("dir" to "lib", "include" to listOf("*.aar"))))
-    compileOnly(files("libs/libxposed-api-100.aar"))
+    compileOnly("io.github.libxposed:api:101.0.1")
     debugImplementation(files("libs/backdrop-debug.aar"))
     releaseImplementation(files("libs/backdrop-release.aar"))
 }
