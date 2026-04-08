@@ -32,7 +32,7 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleApi100Debug assembleApi101Debug
         working-directory: android
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -48,19 +48,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-      - name: Export APK_NAME for later use
-        run: echo "APK_NAME=LibrePods-$(echo ${{ github.sha }} | cut -c1-7).apk" >> $GITHUB_ENV
-      - name: Rename .apk file
-        run: mv "./Debug APK/debug/"*.apk "./$APK_NAME"
+      - name: Export SHA short name
+        run: echo "SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+      - name: Collect and rename APK files
+        run: |
+          shopt -s globstar nullglob
+          APKS=(./Debug\ APK/**/*.apk)
+          if [ ${#APKS[@]} -eq 0 ]; then
+            echo "No APK files found in artifact output"
+            exit 1
+          fi
+
+          : > renamed_apks.txt
+          for apk in "${APKS[@]}"; do
+            base="$(basename "$apk")"
+            if [[ "$base" == *"api100"* ]]; then
+              out="LibrePods-${SHA_SHORT}-api100.apk"
+            elif [[ "$base" == *"api101"* ]]; then
+              out="LibrePods-${SHA_SHORT}-api101.apk"
+            else
+              out="LibrePods-${SHA_SHORT}-${base}"
+            fi
+
+            cp "$apk" "./$out"
+            echo "./$out" >> renamed_apks.txt
+          done
       - name: Decode keystore file
         run: echo "${{ secrets.DEBUG_KEYSTORE_FILE }}" | base64 --decode > debug.keystore
       - name: Install apksigner
         run: sudo apt-get update && sudo apt-get install -y apksigner
-      - name: Sign APK
+      - name: Sign APKs
         run: |
-          apksigner sign --ks debug.keystore --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android "./$APK_NAME"
-      - name: Verify APK
-        run: apksigner verify "./$APK_NAME"
+          while IFS= read -r apk; do
+            apksigner sign --ks debug.keystore --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android "$apk"
+          done < renamed_apks.txt
+      - name: Verify APKs
+        run: |
+          while IFS= read -r apk; do
+            apksigner verify "$apk"
+          done < renamed_apks.txt
       - name: Fetch the latest non-nightly release tag
         id: fetch-tag
         run: echo "::set-output name=tag::$(git describe --tags $(git rev-list --tags --max-count=1))"
@@ -96,5 +122,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mapfile -t APKS < renamed_apks.txt
           gh release view "nightly" && gh release delete "nightly" -y --cleanup-tag
-          gh release create "nightly" "./$APK_NAME" "./btl2capfix.zip" -p -t "Nightly Release" --notes-file "${{ steps.release-notes.outputs.notes_file }}" --generate-notes
+          gh release create "nightly" "${APKS[@]}" "./btl2capfix.zip" -p -t "Nightly Release" --notes-file "${{ steps.release-notes.outputs.notes_file }}" --generate-notes
