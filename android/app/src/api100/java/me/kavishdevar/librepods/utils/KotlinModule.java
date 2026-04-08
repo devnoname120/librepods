@@ -70,7 +70,11 @@ public class KotlinModule extends XposedModule {
                 return;
             }
 
-            handler.onAfter(callback.getThisObject(), Arrays.asList(callback.getArgs()));
+            ModuleHookCore.AfterHookResult hookResult =
+                    handler.onAfter(callback.getThisObject(), Arrays.asList(callback.getArgs()));
+            if (hookResult.getShouldOverrideResult()) {
+                callback.setResult(hookResult.getOverrideResult());
+            }
         }
     }
 }
