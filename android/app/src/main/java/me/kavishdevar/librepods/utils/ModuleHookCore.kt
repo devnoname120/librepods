@@ -24,8 +24,21 @@ private const val TAG = "AirPodsHook"
 
 @SuppressLint("DiscouragedApi", "PrivateApi")
 class ModuleHookCore {
+    class AfterHookResult private constructor(
+        val shouldOverrideResult: Boolean,
+        val overrideResult: Any?,
+    ) {
+        companion object {
+            @JvmField
+            val Continue = AfterHookResult(false, null)
+
+            @JvmStatic
+            fun overrideWith(value: Any?): AfterHookResult = AfterHookResult(true, value)
+        }
+    }
+
     fun interface AfterHookHandler {
-        fun onAfter(thisObject: Any?, args: List<Any?>)
+        fun onAfter(thisObject: Any?, args: List<Any?>): AfterHookResult
     }
 
     interface HookRegistrar {
@@ -100,6 +113,7 @@ class ModuleHookCore {
 
                 hookRegistrar.hookAfter(displayPreferenceMethod) { thisObject, args ->
                     handleDisplayPreferenceAfterInvocation(thisObject, args)
+                    AfterHookResult.Continue
                 }
                 Log.i(TAG, "Successfully hooked displayPreference for AirPods button injection")
             } catch (e: Exception) {
@@ -172,65 +186,106 @@ class ModuleHookCore {
 
             Log.i(TAG, "Successfully added Open LIBREPODS button to AirPods settings")
         } catch (e: Exception) {
-            Log.e(TAG, "Error in displayPreference hook: ${e.message}", e)
+            Log.e(TAG, "Error in BluetoothSettingsAirPodsHooker: ${e.message}", e)
             e.printStackTrace()
         }
     }
 
-    private fun handleUpdateIconAfterInvocation(args: List<Any?>) {
+    private fun handleUpdateIconAfterInvocation(args: List<Any?>): AfterHookResult {
         Log.i(TAG, "BluetoothIconHooker called with args: ${args.joinToString(", ")}")
         try {
-            val imageView = args.getOrNull(0) as? ImageView ?: return
-            val iconUri = args.getOrNull(1) as? String ?: return
+            if (args.size < 2) {
+                Log.w(
+                    TAG,
+                    "BluetoothIconHooker received insufficient args: count=${args.size}, types=${describeArgTypes(args)}",
+                )
+                return AfterHookResult.Continue
+            }
+
+            val imageView = args.getOrNull(0) as? ImageView
+            if (imageView == null) {
+                Log.w(
+                    TAG,
+                    "BluetoothIconHooker arg[0] is not ImageView: types=${describeArgTypes(args)}",
+                )
+                return AfterHookResult.Continue
+            }
+
+            val iconUri = args.getOrNull(1) as? String
+            if (iconUri == null) {
+                Log.w(
+                    TAG,
+                    "BluetoothIconHooker arg[1] is not String: types=${describeArgTypes(args)}",
+                )
+                return AfterHookResult.Continue
+            }
 
             val uri = iconUri.toUri()
             if (!uri.toString().startsWith("android.resource://me.kavishdevar.librepods")) {
-                return
+                return AfterHookResult.Continue
             }
 
             Log.i(TAG, "Handling AirPods icon URI: $uri")
 
             try {
                 val context = imageView.context
+                val packageName = uri.authority
+                if (packageName == null) {
+                    Log.e(TAG, "Icon URI has no authority: $uri")
+                    return AfterHookResult.Continue
+                }
+
+                val packageContext = context.createPackageContext(
+                    packageName,
+                    Context.CONTEXT_IGNORE_SECURITY
+                )
+
+                val resPath = uri.pathSegments
+                if (resPath.size < 2 || resPath[0] != "drawable") {
+                    Log.e(TAG, "Unsupported icon resource path: $uri")
+                    return AfterHookResult.Continue
+                }
+
+                val resourceName = resPath[1]
+                val resourceId = packageContext.resources.getIdentifier(
+                    resourceName, "drawable", packageName
+                )
+                if (resourceId == 0) {
+                    Log.e(TAG, "Resource not found: $resourceName")
+                    return AfterHookResult.Continue
+                }
 
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     try {
-                        val packageName = uri.authority ?: return@post
-                        val packageContext = context.createPackageContext(
-                            packageName,
-                            Context.CONTEXT_IGNORE_SECURITY
+                        val drawable = packageContext.resources.getDrawable(
+                            resourceId, packageContext.theme
                         )
 
-                        val resPath = uri.pathSegments
-                        if (resPath.size >= 2 && resPath[0] == "drawable") {
-                            val resourceName = resPath[1]
-                            val resourceId = packageContext.resources.getIdentifier(
-                                resourceName, "drawable", packageName
-                            )
+                        imageView.setImageDrawable(drawable)
+                        imageView.alpha = 1.0f
 
-                            if (resourceId != 0) {
-                                val drawable = packageContext.resources.getDrawable(
-                                    resourceId, packageContext.theme
-                                )
-
-                                imageView.setImageDrawable(drawable)
-                                imageView.alpha = 1.0f
-
-                                Log.i(TAG, "Successfully loaded icon from resource: $resourceName")
-                            } else {
-                                Log.e(TAG, "Resource not found: $resourceName")
-                            }
-                        }
+                        Log.i(TAG, "Successfully loaded icon from resource: $resourceName")
                     } catch (e: Exception) {
                         Log.e(TAG, "Error loading resource from URI $uri: ${e.message}")
                     }
                 }
+
+                return AfterHookResult.overrideWith(null)
             } catch (e: Exception) {
                 Log.e(TAG, "Error accessing context: ${e.message}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in BluetoothIconHooker: ${e.message}")
             e.printStackTrace()
+        }
+
+        return AfterHookResult.Continue
+    }
+
+    private fun describeArgTypes(args: List<Any?>): String {
+        if (args.isEmpty()) return "[]"
+        return args.joinToString(prefix = "[", postfix = "]") { arg ->
+            arg?.javaClass?.name ?: "null"
         }
     }
 

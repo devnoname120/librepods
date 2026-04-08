@@ -29,8 +29,12 @@ class KotlinModule : XposedModule() {
         override fun hookAfter(method: Method, handler: ModuleHookCore.AfterHookHandler) {
             hook(method).intercept { chain ->
                 val result = chain.proceed()
-                handler.onAfter(chain.thisObject, chain.args)
-                result
+                val hookResult = handler.onAfter(chain.thisObject, chain.args)
+                if (hookResult.shouldOverrideResult) {
+                    hookResult.overrideResult
+                } else {
+                    result
+                }
             }
         }
     }
