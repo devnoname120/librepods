@@ -18,29 +18,32 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.core.net.toUri
-import io.github.libxposed.api.XposedModule
-import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.lang.reflect.Method
 
 private const val TAG = "AirPodsHook"
 
 @SuppressLint("DiscouragedApi", "PrivateApi")
-class KotlinModule : XposedModule() {
-    override fun onModuleLoaded(param: ModuleLoadedParam) {
-        super.onModuleLoaded(param)
-        Log.i(TAG, "AirPodsHook module initialized at :: ${param.processName}")
+class ModuleHookCore {
+    fun interface AfterHookHandler {
+        fun onAfter(thisObject: Any?, args: List<Any?>)
     }
 
-    override fun onPackageLoaded(param: PackageLoadedParam) {
-        super.onPackageLoaded(param)
-        Log.i(TAG, "onPackageLoaded :: ${param.packageName}")
+    interface HookRegistrar {
+        fun hookAfter(method: Method, handler: AfterHookHandler)
+    }
 
-        if (param.packageName == "com.google.android.bluetooth" || param.packageName == "com.android.bluetooth") {
+    fun onModuleLoaded(processName: String) {
+        Log.i(TAG, "AirPodsHook module initialized at :: $processName")
+    }
+
+    fun onPackageLoaded(packageName: String, isFirstPackage: Boolean) {
+        Log.i(TAG, "onPackageLoaded :: $packageName")
+
+        if (packageName == "com.google.android.bluetooth" || packageName == "com.android.bluetooth") {
             Log.i(TAG, "Bluetooth app detected, hooking l2c_fcr_chk_chan_modes")
 
             try {
-                if (param.isFirstPackage) {
+                if (isFirstPackage) {
                     Log.i(TAG, "Loading native library for Bluetooth hook")
                     System.loadLibrary("l2c_fcr_hook")
                     Log.i(TAG, "Native library loaded successfully")
@@ -51,24 +54,29 @@ class KotlinModule : XposedModule() {
         }
     }
 
-    override fun onPackageReady(param: PackageReadyParam) {
-        super.onPackageReady(param)
-        Log.i(TAG, "onPackageReady :: ${param.packageName}")
+    fun onPackageReady(packageName: String, classLoader: ClassLoader, hookRegistrar: HookRegistrar) {
+        Log.i(TAG, "onPackageReady :: $packageName")
 
-        when (param.packageName) {
+        when (packageName) {
             "com.google.android.settings" -> hookBluetoothSettings(
-                classLoader = param.classLoader,
-                controllerClassName = "com.google.android.settings.bluetooth.AdvancedBluetoothDetailsHeaderController"
+                classLoader = classLoader,
+                controllerClassName = "com.google.android.settings.bluetooth.AdvancedBluetoothDetailsHeaderController",
+                hookRegistrar = hookRegistrar,
             )
 
             "com.android.settings" -> hookBluetoothSettings(
-                classLoader = param.classLoader,
-                controllerClassName = "com.android.settings.bluetooth.AdvancedBluetoothDetailsHeaderController"
+                classLoader = classLoader,
+                controllerClassName = "com.android.settings.bluetooth.AdvancedBluetoothDetailsHeaderController",
+                hookRegistrar = hookRegistrar,
             )
         }
     }
 
-    private fun hookBluetoothSettings(classLoader: ClassLoader, controllerClassName: String) {
+    private fun hookBluetoothSettings(
+        classLoader: ClassLoader,
+        controllerClassName: String,
+        hookRegistrar: HookRegistrar,
+    ) {
         Log.i(TAG, "Settings app detected, hooking Bluetooth icon handling")
         try {
             val headerControllerClass = classLoader.loadClass(controllerClassName)
@@ -76,26 +84,22 @@ class KotlinModule : XposedModule() {
             val updateIconMethod = headerControllerClass.getDeclaredMethod(
                 "updateIcon",
                 ImageView::class.java,
-                String::class.java
+                String::class.java,
             )
 
-            hook(updateIconMethod).intercept { chain ->
-                val result = chain.proceed()
-                handleUpdateIconAfterInvocation(chain.args)
-                result
+            hookRegistrar.hookAfter(updateIconMethod) { _, args ->
+                handleUpdateIconAfterInvocation(args)
             }
             Log.i(TAG, "Successfully hooked updateIcon method in Bluetooth settings")
 
             try {
                 val displayPreferenceMethod = headerControllerClass.getDeclaredMethod(
                     "displayPreference",
-                    classLoader.loadClass("androidx.preference.PreferenceScreen")
+                    classLoader.loadClass("androidx.preference.PreferenceScreen"),
                 )
 
-                hook(displayPreferenceMethod).intercept { chain ->
-                    val result = chain.proceed()
-                    handleDisplayPreferenceAfterInvocation(chain.thisObject, chain.args)
-                    result
+                hookRegistrar.hookAfter(displayPreferenceMethod) { thisObject, args ->
+                    handleDisplayPreferenceAfterInvocation(thisObject, args)
                 }
                 Log.i(TAG, "Successfully hooked displayPreference for AirPods button injection")
             } catch (e: Exception) {
@@ -105,7 +109,6 @@ class KotlinModule : XposedModule() {
             Log.e(TAG, "Failed to hook Bluetooth icon handler: ${e.message}", e)
         }
     }
-
     private fun handleDisplayPreferenceAfterInvocation(controller: Any?, args: List<Any?>) {
         try {
             val controllerObject = controller ?: return
